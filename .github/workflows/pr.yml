@@ -143,3 +143,17 @@ jobs:
           kubectl create namespace $K8S_NAMESPACE
           ./mvnw -pl ${{ matrix.example }} -s .github/mvn-settings.xml clean verify -Pkubernetes,kubernetes-it -Ddekorate.docker.registry=$KIND_REGISTRY -Dkubernetes.namespace=$K8S_NAMESPACE -Ddekorate.push=true
           kubectl delete namespace $K8S_NAMESPACE
+      - name: Build Project using Helm
+        run: |
+          K8S_NAMESPACE=helm
+          kubectl create namespace $K8S_NAMESPACE
+          # 1. Generate kubernetes manifests:
+          ./mvnw -s .github/mvn-settings.xml -pl ${{ matrix.example }} clean install -DskipTests
+          # 2. Install example image to the container registry:
+          ./scripts/buildAndPushImage.sh ${{ matrix.example }} app:latest $KIND_REGISTRY
+          # 3. Install the helm chart and wait until is deployed
+          ./scripts/installHelmChart.sh ${{ matrix.example }} ./${{ matrix.example }}/target/classes/META-INF/dekorate/helm/chart app:latest $KIND_REGISTRY $K8S_NAMESPACE
+          # 4. Run the kubernetes tests in an unmanaged way:
+          ./mvnw -s .github/mvn-settings.xml -pl ${{ matrix.example }} clean verify -Pkubernetes-it -Dkubernetes.namespace=$K8S_NAMESPACE -Dunmanaged-test=true
+          # 5. Clean up:
+          kubectl delete namespace $K8S_NAMESPACE
